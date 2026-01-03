@@ -2,30 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>BCA LAND // COMMAND CENTER</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCA BOT // ORCHESTRATOR</title>
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; }
-        input { background: #111; color: #fff; border: 1px solid #0f0; padding: 10px; width: 300px; display: block; margin-bottom: 10px; }
-        button { background: #ff005a; color: white; padding: 10px 20px; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #d0004b; }
-        .log { height: 300px; overflow-y: scroll; border: 1px dashed #333; padding: 10px; color: #aaa; }
-        .success { color: #0f0; } .error { color: #f00; } .alert { color: #ff005a; }
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; font-size: 14px; }
+        .box { border: 1px solid #333; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        h1 { color: #ff005a; font-size: 1.2rem; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        h3 { margin-top: 0; color: #fff; font-size: 1rem; }
+        input { background: #111; color: #fff; border: 1px solid #333; padding: 12px; width: 100%; box-sizing: border-box; margin-bottom: 10px; border-radius: 4px; }
+        button { background: #ff005a; color: white; padding: 15px; width: 100%; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; font-size: 16px; }
+        button:active { background: #d0004b; }
+        .log-container { height: 300px; overflow-y: scroll; border: 1px dashed #333; padding: 10px; background: #050505; }
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #111; padding-bottom: 2px; word-break: break-all; }
+        .success { color: #0f0; } 
+        .error { color: #f00; background: rgba(255,0,0,0.1); } 
+        .alert { color: #ff005a; }
+        .info { color: #888; }
     </style>
 </head>
 <body>
-    <h1>🤖 BCA BOT ORCHESTRATOR</h1>
+    <h1>🤖 BCA BOT CONTROLLER</h1>
     
     <div class="box">
         <h3>1. AUTHENTICATION</h3>
-        <input type="text" id="tg-token" placeholder="Telegram Bot Token (Get from @BotFather)">
-        <input type="text" id="admin-id" placeholder="Your Telegram User ID (Get from @userinfobot)">
-        <button onclick="handleAuthClick()">LOGIN TO GOOGLE DRIVE</button>
+        <!-- Inputs preserve values using localStorage -->
+        <input type="text" id="tg-token" placeholder="Telegram Bot Token">
+        <input type="text" id="admin-id" placeholder="Your Telegram User ID">
+        <button onclick="handleAuthClick()">🚀 START SYSTEM</button>
     </div>
 
     <div class="box">
-        <h3>2. SYSTEM LOGS</h3>
-        <div id="console" class="log">System Ready... Waiting for auth.</div>
+        <h3>2. LIVE LOGS</h3>
+        <div id="console" class="log-container">
+            <div class="log-entry info">System initialized. Waiting for user...</div>
+        </div>
     </div>
 
     <!-- Silent Audio to keep browser tab awake -->
@@ -44,115 +54,167 @@
         const DB_FILE_ID = '1wcPqjXJyTi9m9HrZUbMHOEj78x_6_534';
         // ----------------------------------
 
-        let tokenClient, tgToken, adminId;
+        let tokenClient;
         let lastUpdateId = 0;
+        let isPolling = false;
 
-        // --- GOOGLE AUTH ---
-        function handleAuthClick() {
-            tgToken = document.getElementById('tg-token').value;
-            adminId = document.getElementById('admin-id').value;
-            if(!tgToken || !adminId) return alert("Enter Telegram Details first!");
-            
-            tokenClient.requestAccessToken({prompt: ''});
-        }
+        // --- GLOBAL ERROR HANDLING (For Mobile Debugging) ---
+        window.onerror = function(msg, url, line) {
+            log(`CRITICAL ERROR: ${msg} (Line ${line})`, 'error');
+            return false;
+        };
 
+        // --- LOAD SAVED CREDENTIALS ---
         window.onload = function() {
+            document.getElementById('tg-token').value = localStorage.getItem('tg_token') || '';
+            document.getElementById('admin-id').value = localStorage.getItem('admin_id') || '';
+            
             gapi.load('client', async () => {
-                await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
+                try {
+                    await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
+                    log("Google API Loaded.", "info");
+                } catch(e) { log("API Init Error: " + JSON.stringify(e), 'error'); }
             });
+
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: GOOGLE_CLIENT_ID,
                 scope: 'https://www.googleapis.com/auth/drive.file',
                 callback: (resp) => {
-                    if (resp.error) return;
-                    log("Google Access Granted. STARTING BOT...", "success");
-                    document.getElementById('bg-audio').play(); // Keep alive
-                    pollTelegram();
+                    if (resp.error) {
+                        log("Auth Error: " + JSON.stringify(resp), 'error');
+                        return;
+                    }
+                    log("✅ Auth Success! Initializing Bot...", "success");
+                    startBotEngine();
                 }
             });
         };
 
-        // --- TELEGRAM BOT LOGIC ---
-        async function pollTelegram() {
+        function handleAuthClick() {
+            const tg = document.getElementById('tg-token').value;
+            const ad = document.getElementById('admin-id').value;
+            
+            if(!tg || !ad) return alert("Please fill in Telegram details.");
+            
+            // Save for next time
+            localStorage.setItem('tg_token', tg);
+            localStorage.setItem('admin_id', ad);
+
+            tokenClient.requestAccessToken({prompt: ''});
+        }
+
+        function startBotEngine() {
+            // 1. Try to play audio (catch error if mobile blocks it)
             try {
-                const url = `https://api.telegram.org/bot${tgToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
+                const audio = document.getElementById('bg-audio');
+                audio.play().catch(e => log("⚠️ Audio background sleep-prevention blocked (Tap screen if bot stops)", "info"));
+            } catch (e) { console.log(e); }
+
+            // 2. Start Polling
+            if (!isPolling) {
+                isPolling = true;
+                log("📡 Bot is ONLINE and Polling Telegram...", "success");
+                pollTelegram();
+            }
+        }
+
+        // --- TELEGRAM LOGIC ---
+        async function pollTelegram() {
+            const tgToken = document.getElementById('tg-token').value;
+            const adminId = document.getElementById('admin-id').value;
+
+            try {
+                const url = `https://api.telegram.org/bot${tgToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=10`;
                 const resp = await fetch(url);
                 const data = await resp.json();
-                
-                if (data.result) {
+
+                if (data.ok && data.result) {
                     for (const update of data.result) {
                         lastUpdateId = update.update_id;
-                        await processMessage(update.message);
+                        await processMessage(update.message, tgToken, adminId);
                     }
+                } else if (!data.ok) {
+                    log("Telegram Error: " + data.description, "error");
                 }
-            } catch (e) { console.error(e); }
-            setTimeout(pollTelegram, 1000); // Loop forever
+            } catch (e) {
+                log("Network Error (Retrying...): " + e.message, "info");
+            }
+
+            // Loop
+            setTimeout(pollTelegram, 2000); 
         }
 
-        async function processMessage(msg) {
+        async function processMessage(msg, token, adminId) {
             if (!msg || String(msg.from.id) !== String(adminId)) return;
 
-            // 1. Handle Files
+            // Handle Text Commands
+            if (msg.text === '/start') {
+                return sendMessage(msg.chat.id, "🤖 <b>BCA Bot Online.</b>\nSend me a file with a caption (e.g. #DBMS) to upload.", token);
+            }
+
+            // Handle Files
             if (msg.document || msg.photo || msg.video) {
-                const fileObj = msg.document || msg.video || msg.photo[msg.photo.length - 1];
-                const caption = msg.caption || ""; 
+                const fileObj = msg.document || msg.video || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
                 
-                // Parse Category from Hashtag (e.g. "Notes #DBMS")
+                // Caption Handling
+                const caption = msg.caption || "";
                 let category = "General";
-                if(caption.includes("#DBMS")) category = "DBMS";
-                if(caption.includes("#C")) category = "Programming in C";
-                if(caption.includes("#DS")) category = "Data Structures";
-                if(caption.includes("#Math")) category = "Mathematics";
+                if(caption.toLowerCase().includes("dbms")) category = "DBMS";
+                if(caption.toLowerCase().includes("c programming")) category = "Programming in C";
+                if(caption.toLowerCase().includes("data")) category = "Data Structures";
+                if(caption.toLowerCase().includes("math")) category = "Mathematics";
 
-                log(`📥 Receiving: ${fileObj.file_name || 'Image'} (${category})`, "alert");
-                sendMessage(msg.chat.id, `⏳ <b>Downloading...</b>\n\nFile: ${fileObj.file_name || 'Media'}\nCategory: ${category}`);
+                log(`📥 Processing File: ${category}`, "alert");
+                sendMessage(msg.chat.id, `⏳ <b>Processing...</b>\nCategory: ${category}`, token);
 
-                await handleFileUpload(fileObj, caption, category, msg.chat.id);
+                try {
+                    await handleFileUpload(fileObj, caption, category, msg.chat.id, token);
+                } catch (e) {
+                    log("Upload Failed: " + e.message, "error");
+                    sendMessage(msg.chat.id, "❌ Failed: " + e.message, token);
+                }
             }
         }
 
-        async function handleFileUpload(fileObj, caption, category, chatId) {
-            // Get Telegram File Path
-            const pathRes = await fetch(`https://api.telegram.org/bot${tgToken}/getFile?file_id=${fileObj.file_id}`);
+        async function handleFileUpload(fileObj, caption, category, chatId, token) {
+            // 1. Get Path
+            const pathRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileObj.file_id}`);
             const pathJson = await pathRes.json();
             
-            if(pathJson.result.file_size > 20 * 1024 * 1024) {
-                return sendMessage(chatId, "❌ Error: File > 20MB. Telegram blocks browser download. Use direct link.");
-            }
+            if (pathJson.result.file_size > 20 * 1024 * 1024) throw new Error("File too large (>20MB) for browser bot.");
 
-            // Download Blob
-            const fileUrl = `https://api.telegram.org/file/bot${tgToken}/${pathJson.result.file_path}`;
+            // 2. Download
+            const fileUrl = `https://api.telegram.org/file/bot${token}/${pathJson.result.file_path}`;
             const blob = await fetch(fileUrl).then(r => r.blob());
 
-            // Upload to Drive
+            // 3. Upload to Drive
             const fileName = fileObj.file_name || `upload_${Date.now()}.jpg`;
-            const driveFile = await uploadToDrive(blob, fileName, blob.type);
+            const driveFile = await uploadToDrive(blob, fileName);
 
-            // Update DB
+            // 4. Update DB
             const newEntry = {
                 id: driveFile.id,
                 name: fileName,
-                url: `/drive-viewer?id=${driveFile.id}`, // Virtual URL
+                url: `/drive-viewer?id=${driveFile.id}`,
                 category: category,
-                caption: caption.replace(/#\w+/g, "").trim(), // Remove hashtags
+                caption: caption,
                 size: blob.size,
                 date: Math.floor(Date.now() / 1000)
             };
             await updateDatabase(newEntry);
 
-            sendMessage(chatId, `✅ <b>Deployed Successfully!</b>\n\n📂 Saved to: ${category}\n🔗 Live on Site.`);
+            log("✅ Upload Complete!", "success");
+            sendMessage(chatId, `✅ <b>Uploaded!</b>\nView on site.`, token);
         }
 
-        // --- DRIVE & DB FUNCTIONS ---
-        async function uploadToDrive(blob, name, mime) {
+        // --- DRIVE FUNCTIONS ---
+        async function uploadToDrive(blob, name) {
             const accessToken = gapi.client.getToken().access_token;
             const metadata = { name: name, parents: [DRIVE_FOLDER_ID] };
-            
             const form = new FormData();
             form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
             form.append('file', blob);
 
-            log("🚀 Uploading to Cloud...", "alert");
             const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + accessToken },
@@ -160,7 +222,7 @@
             });
             const data = await res.json();
             
-            // Make Public
+            // Permission
             await gapi.client.drive.permissions.create({
                 fileId: data.id, resource: { role: 'reader', type: 'anyone' }
             });
@@ -168,38 +230,34 @@
         }
 
         async function updateDatabase(newEntry) {
-            log("💾 Updating Database Manifest...", "alert");
-            // 1. Get current DB
             const res = await gapi.client.drive.files.get({ fileId: DB_FILE_ID, alt: 'media' });
             let db = res.result || [];
-            if(typeof db === 'string') db = JSON.parse(db);
+            if (typeof db === 'string') db = JSON.parse(db); // Safety check
             
-            // 2. Add new entry
             db.unshift(newEntry);
 
-            // 3. Save back
             const accessToken = gapi.client.getToken().access_token;
             await fetch(`https://www.googleapis.com/upload/drive/v3/files/${DB_FILE_ID}?uploadType=media`, {
                 method: 'PATCH',
                 headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
                 body: JSON.stringify(db)
             });
-            log("✨ Database Synced!", "success");
         }
 
-        function sendMessage(chatId, text) {
-            fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        function sendMessage(chatId, text, token) {
+            fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' })
             });
         }
 
-        function log(msg, type='') {
+        function log(msg, type) {
             const div = document.createElement('div');
-            div.innerHTML = `> ${msg}`;
-            div.className = type;
-            document.getElementById('console').prepend(div);
+            div.innerText = `> ${msg}`;
+            div.className = `log-entry ${type}`;
+            const consoleDiv = document.getElementById('console');
+            consoleDiv.prepend(div);
         }
     </script>
 </body>
