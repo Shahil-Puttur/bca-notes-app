@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCA LAND - Official Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        squidPink: '#ff005a',
+                        squidDark: '#0a0a0a',
+                        squidGray: '#1a1a1a',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        glow: {
+                            'from': { 'box-shadow': '0 0 5px #ff005a, 0 0 10px #ff005a' },
+                            'to': { 'box-shadow': '0 0 20px #ff005a, 0 0 30px #ff005a' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0a0a0a;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        .glass {
+            background: rgba(26, 26, 26, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .netflix-scroll::-webkit-scrollbar { display: none; }
+        .netflix-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        .squid-gradient { background: linear-gradient(45deg, #ff005a, #80002d); }
+        .card-hover:hover {
+            transform: scale(1.05) translateY(-10px);
+            z-index: 10;
+            box-shadow: 0 20px 40px rgba(255, 0, 90, 0.3);
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        .parallax-bg {
+            background-attachment: fixed;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover;
+        }
+    </style>
+</head>
+<body class="font-sans">
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-[100] glass px-6 py-4 flex justify-between items-center transition-all duration-500" id="navbar">
+        <div class="text-2xl font-extrabold tracking-tighter text-squidPink flex items-center">
+            <div class="w-8 h-8 squid-gradient rounded-lg mr-3 flex items-center justify-center animate-pulse">
+                <i class="fas fa-play text-xs text-white"></i>
+            </div>
+            BCA<span class="text-white"> LAND</span>
+        </div>
+        <div class="hidden md:flex items-center space-x-8">
+            <div class="relative group">
+                <input type="text" id="live-search" placeholder="Search notes..." class="bg-white/5 border border-white/10 rounded-full px-6 py-2 text-sm focus:outline-none focus:border-squidPink w-64 transition-all group-hover:w-80">
+                <i class="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
+            </div>
+            <div class="flex space-x-8 font-semibold text-xs uppercase tracking-[0.2em]">
+                <a href="#" class="hover:text-squidPink transition-colors">Home</a>
+                <a href="#subjects" class="hover:text-squidPink transition-colors">Subjects</a>
+                <a href="#recent" class="hover:text-squidPink transition-colors">Recent</a>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="wake-up-btn" onclick="wakeUpBot()" class="hidden md:flex items-center glass px-4 py-2 rounded-full text-[10px] font-bold text-green-500 hover:bg-green-500/10 transition">
+                <i class="fas fa-robot mr-2 animate-bounce"></i> WAKE UP BOT 🤖
+            </button>
+            <div id="progress-badge" class="hidden md:flex items-center glass px-4 py-2 rounded-full text-[10px] font-bold text-squidPink">
+                <i class="fas fa-graduation-cap mr-2"></i> <span id="progress-count">0</span> NOTES READ
+            </div>
+            <div class="w-8 h-8 rounded bg-squidPink flex items-center justify-center font-bold text-xs shadow-[0_0_15px_rgba(255,0,90,0.5)]">S</div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative h-screen flex items-center justify-center overflow-hidden">
+        <!-- 3D Abstract Background -->
+        <div class="absolute inset-0 z-0">
+            <img src="assets/abstract_3d.jpg" class="w-full h-full object-cover opacity-30 scale-110" id="hero-bg">
+            <div class="absolute inset-0 bg-gradient-to-b from-transparent via-squidDark to-squidDark"></div>
+        </div>
+        
+        <!-- Floating 3D Education Elements - High Visibility -->
+        <div class="absolute top-[15%] left-[5%] w-64 h-64 animate-float opacity-100 hidden lg:block z-[60]">
+            <img src="assets/3d_grad_cap.png" class="w-full h-full object-contain drop-shadow-[0_0_50px_rgba(255,0,90,0.8)]">
+        </div>
+        <div class="absolute top-[25%] right-[8%] w-56 h-56 animate-float opacity-100 hidden lg:block z-[60]" style="animation-delay: -1.5s;">
+            <img src="assets/3d_idea.png" class="w-full h-full object-contain drop-shadow-[0_0_50px_rgba(255,0,90,0.7)]">
+        </div>
+        <div class="absolute bottom-[15%] left-[10%] w-72 h-72 animate-float opacity-100 hidden lg:block z-[60]" style="animation-delay: -3s;">
+            <img src="assets/3d_books_stack.png" class="w-full h-full object-contain drop-shadow-[0_0_50px_rgba(255,0,90,0.6)]">
+        </div>
+        <div class="absolute bottom-[20%] right-[5%] w-60 h-60 animate-float opacity-100 hidden lg:block z-[60]" style="animation-delay: -4.5s;">
+            <img src="assets/3d_student_kit.png" class="w-full h-full object-contain drop-shadow-[0_0_50px_rgba(255,0,90,0.7)]">
+        </div>
+
+        <div class="relative z-10 text-center px-4" id="hero-content">
+            <div class="inline-block px-4 py-1 rounded-full border border-squidPink/50 text-squidPink text-[10px] font-bold uppercase tracking-[0.3em] mb-6 animate-pulse">
+                Official Student Portal
+            </div>
+            <h1 class="text-6xl md:text-9xl font-black mb-6 tracking-tighter leading-[0.9]">
+                BCA <span class="text-squidPink">LAND</span>
+            </h1>
+            <div class="space-y-2 mb-10">
+                <p class="text-white text-xl md:text-2xl font-bold tracking-widest uppercase">Vidyarashmi First Grade College Savanoor</p>
+                <p class="text-squidPink text-sm md:text-base font-black tracking-[0.5em] uppercase">Developed by Shahil</p>
+            </div>
+            <div class="flex flex-col md:flex-row gap-6 justify-center items-center">
+                <a href="#recent" class="squid-gradient px-10 py-5 rounded-xl font-black text-sm uppercase tracking-widest hover:scale-105 transition transform active:scale-95 shadow-[0_0_30px_rgba(255,0,90,0.4)]">
+                    <i class="fas fa-play mr-2"></i> Browse Now
+                </a>
+                <a href="#subjects" class="glass px-10 py-5 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition flex items-center">
+                    <i class="fas fa-list-ul mr-2"></i> Subject List
+                </a>
+            </div>
+        </div>
+        
+        <div class="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce text-gray-500">
+            <i class="fas fa-chevron-down text-2xl"></i>
+        </div>
+    </section>
+
+    <!-- Recent Uploads (Netflix Style) -->
+    <section id="recent" class="py-24 pl-6 md:pl-12 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-96 h-96 bg-squidPink/5 blur-[150px] rounded-full"></div>
+        
+        <div class="flex justify-between items-end mb-10 pr-6 md:pr-12">
+            <div>
+                <h2 class="text-4xl font-black tracking-tighter mb-2">RECENT UPLOADS</h2>
+                <p class="text-gray-500 text-sm uppercase tracking-widest">Freshly added by the community</p>
+            </div>
+            <div class="flex space-x-2">
+                <button class="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-squidPink transition" onclick="scrollRecent(-400)">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-squidPink transition" onclick="scrollRecent(400)">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="recent-list" class="flex space-x-6 overflow-x-auto netflix-scroll pb-12 transition-all duration-500">
+            <!-- Skeletons -->
+            <div class="min-w-[300px] h-[450px] rounded-2xl skeleton"></div>
+            <div class="min-w-[300px] h-[450px] rounded-2xl skeleton"></div>
+            <div class="min-w-[300px] h-[450px] rounded-2xl skeleton"></div>
+            <div class="min-w-[300px] h-[450px] rounded-2xl skeleton"></div>
+        </div>
+    </section>
+
+    <!-- Subject Sections -->
+    <section id="subjects" class="py-24 px-6 md:px-12 bg-squidGray/20 relative">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20">
+                <h2 class="text-5xl font-black tracking-tighter mb-4">SUBJECT LIBRARIES</h2>
+                <div class="w-24 h-1 squid-gradient mx-auto rounded-full"></div>
+            </div>
+
+            <div id="subject-grids" class="space-y-24">
+                <!-- Dynamic subject sections will be injected here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- File Preview Modal -->
+    <div id="preview-modal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 md:p-10">
+        <div class="absolute inset-0 bg-black/95 backdrop-blur-2xl" onclick="closePreview()"></div>
+        <div class="relative glass w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-[2rem] flex flex-col md:flex-row shadow-[0_0_100px_rgba(0,0,0,0.5)]">
+            <div class="w-full md:w-2/3 bg-black/40 flex items-center justify-center p-8 relative overflow-hidden">
+                <div class="absolute inset-0 opacity-10">
+                    <img src="assets/abstract_3d.jpg" class="w-full h-full object-cover">
+                </div>
+                <div id="modal-preview-content" class="relative z-10 w-full h-full flex items-center justify-center">
+                    <!-- Preview -->
+                </div>
+            </div>
+            <div class="w-full md:w-1/3 p-10 flex flex-col justify-between bg-squidGray/40">
+                <div>
+                    <div class="flex justify-between items-start mb-8">
+                        <div id="modal-badge" class="px-4 py-1 rounded-lg bg-squidPink text-[10px] font-black uppercase tracking-[0.2em]">PDF</div>
+                        <button onclick="closePreview()" class="w-10 h-10 rounded-full glass flex items-center justify-center text-gray-400 hover:text-white transition">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <h2 id="modal-title" class="text-4xl font-black mb-4 leading-tight tracking-tighter">File Name</h2>
+                    <p id="modal-subject" class="text-squidPink font-bold text-sm uppercase tracking-widest mb-6">General Notes</p>
+                    
+                    <div class="glass p-6 rounded-2xl mb-8">
+                        <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Description / Caption</p>
+                        <p id="modal-caption" class="text-gray-300 italic">No description provided.</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 text-xs uppercase tracking-widest font-bold">
+                        <div class="glass p-4 rounded-xl">
+                            <p class="text-gray-500 mb-1">Size</p>
+                            <p id="modal-size" class="text-white">0 KB</p>
+                        </div>
+                        <div class="glass p-4 rounded-xl">
+                            <p class="text-gray-500 mb-1">Date</p>
+                            <p id="modal-date" class="text-white">Jan 1, 2024</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-12">
+                    <a id="modal-download" href="#" download class="w-full squid-gradient py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] text-center block hover:scale-[1.02] transition transform shadow-[0_10px_30px_rgba(255,0,90,0.3)]">
+                        <i class="fas fa-cloud-download-alt mr-2"></i> Download Document
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-20 px-6 border-t border-white/5 bg-squidDark relative overflow-hidden">
+        <div class="absolute bottom-0 left-0 w-full h-1 squid-gradient"></div>
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 items-center">
+            <div class="text-center md:text-left">
+                <div class="text-3xl font-black text-squidPink mb-4 tracking-tighter">BCA<span class="text-white"> LAND</span></div>
+                <p class="text-gray-500 text-sm max-w-xs mx-auto md:mx-0">Vidyarashmi First Grade College Savanoor. Developed with excellence by Shahil.</p>
+            </div>
+            <div class="flex justify-center space-x-8 text-2xl">
+                <a href="#" class="text-gray-600 hover:text-squidPink transition-all hover:-translate-y-1"><i class="fab fa-github"></i></a>
+                <a href="#" class="text-gray-600 hover:text-squidPink transition-all hover:-translate-y-1"><i class="fab fa-telegram"></i></a>
+                <a href="#" class="text-gray-600 hover:text-squidPink transition-all hover:-translate-y-1"><i class="fas fa-envelope"></i></a>
+            </div>
+            <div class="text-center md:text-right text-gray-600 text-xs uppercase tracking-widest font-bold">
+                <p>© 2024 Official BCA Portal</p>
+                <p class="mt-2">Built with <i class="fas fa-heart text-squidPink"></i> for Students</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = "https://8000-iw85kq7zatqppjrycasis-8583740f.sg1.manus.computer";
+        const SUBJECTS = ["Programming in C", "DBMS", "Data Structures", "Mathematics", "General"];
+
+        async function fetchFiles() {
+            try {
+                const response = await fetch(`${API_BASE}/files`);
+                const files = await response.json();
+                renderRecent(files.slice(0, 10));
+                renderSubjectGrids(files);
+                initAnimations();
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        function renderRecent(files) {
+            const container = document.getElementById('recent-list');
+            if (files.length === 0) {
+                container.innerHTML = '<div class="text-gray-600 p-10 font-bold uppercase tracking-widest">No transmissions found...</div>';
+                return;
+            }
+
+            container.innerHTML = files.map(file => createFileCard(file, true)).join('');
+        }
+
+        function renderSubjectGrids(files) {
+            const container = document.getElementById('subject-grids');
+            container.innerHTML = SUBJECTS.map(subject => {
+                const subjectFiles = files.filter(f => f.category === subject);
+                if (subjectFiles.length === 0) return '';
+
+                return `
+                    <div class="subject-section">
+                        <h3 class="text-2xl font-black tracking-tighter mb-8 flex items-center">
+                            <span class="w-1.5 h-6 squid-gradient mr-4 rounded-full"></span>
+                            ${subject.toUpperCase()}
+                        </h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                            ${subjectFiles.map(file => createFileCard(file, false)).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function createFileCard(file, isRecent) {
+            const isImage = /\.(jpg|jpeg|png|gif)$/i.test(file.name);
+            const isPdf = /\.pdf$/i.test(file.name);
+            const type = isPdf ? 'PDF' : (isImage ? 'IMAGE' : 'DOC');
+            const icon = isPdf ? 'fa-file-pdf' : (isImage ? 'fa-file-image' : 'fa-file-word');
+            
+            const cardClass = isRecent ? 'min-w-[300px] md:min-w-[350px]' : 'w-full';
+            const heightClass = isRecent ? 'h-[450px]' : 'h-[350px]';
+
+            return `
+                <div class="${cardClass} group cursor-pointer" onclick='openPreview(${JSON.stringify(file)})'>
+                    <div class="relative ${heightClass} rounded-2xl overflow-hidden glass border-0 transition-all duration-500 card-hover">
+                        ${isImage ? 
+                            `<img src="${API_BASE}${file.url}" class="w-full h-full object-cover opacity-40 group-hover:opacity-80 transition duration-700 scale-110 group-hover:scale-100" loading="lazy">` :
+                            `<div class="w-full h-full flex items-center justify-center bg-squidGray/30">
+                                <i class="fas ${icon} text-6xl text-squidPink/20 group-hover:text-squidPink/60 transition duration-700 group-hover:scale-110"></i>
+                            </div>`
+                        }
+                        <div class="absolute inset-0 bg-gradient-to-t from-squidDark via-squidDark/40 to-transparent"></div>
+                        <div class="absolute bottom-0 p-8 w-full transform translate-y-2 group-hover:translate-y-0 transition duration-500">
+                            <div class="flex items-center space-x-2 mb-3">
+                                <span class="px-2 py-0.5 rounded bg-squidPink text-[9px] font-black uppercase tracking-tighter">${type}</span>
+                                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">${file.category}</span>
+                            </div>
+                            <h3 class="text-xl font-black truncate tracking-tight mb-1">${file.caption || file.name}</h3>
+                            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">${file.name}</p>
+                            <p class="text-[10px] text-squidPink font-bold uppercase tracking-[0.2em]">${new Date(file.date * 1000).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        let allFiles = [];
+        let readFiles = JSON.parse(localStorage.getItem('readFiles') || '[]');
+
+        function updateProgress() {
+            document.getElementById('progress-count').innerText = readFiles.length;
+            document.getElementById('progress-badge').classList.remove('hidden');
+        }
+
+        function openPreview(file) {
+            if (!readFiles.includes(file.id)) {
+                readFiles.push(file.id);
+                localStorage.setItem('readFiles', JSON.stringify(readFiles));
+                updateProgress();
+            }
+
+            const modal = document.getElementById('preview-modal');
+            const content = document.getElementById('modal-preview-content');
+            const isImage = /\.(jpg|jpeg|png|gif)$/i.test(file.name);
+            const isPdf = /\.pdf$/i.test(file.name);
+            
+            document.getElementById('modal-title').innerText = file.caption || file.name;
+            document.getElementById('modal-size').innerText = (file.size / 1024).toFixed(2) + ' KB';
+            document.getElementById('modal-date').innerText = new Date(file.date * 1000).toLocaleDateString();
+            document.getElementById('modal-badge').innerText = isPdf ? 'PDF' : (isImage ? 'IMAGE' : 'DOC');
+            document.getElementById('modal-subject').innerText = file.category || 'General';
+            document.getElementById('modal-caption').innerText = file.caption ? `Original File: ${file.name}` : 'No additional description.';
+            
+            const downloadUrl = API_BASE + file.url;
+            const downloadBtn = document.getElementById('modal-download');
+            downloadBtn.onclick = async (e) => {
+                e.preventDefault();
+                const originalText = downloadBtn.innerHTML;
+                downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Preparing...';
+                try {
+                    const response = await fetch(downloadUrl);
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file.name;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } catch(err) {
+                    window.open(downloadUrl, '_blank');
+                } finally {
+                    downloadBtn.innerHTML = originalText;
+                }
+            };
+            
+            if (isImage) {
+                content.innerHTML = `<img src="${API_BASE}${file.url}" class="max-w-full max-h-full object-contain rounded-xl shadow-2xl">`;
+            } else {
+                const icon = isPdf ? 'fa-file-pdf' : 'fa-file-word';
+                content.innerHTML = `<div class="text-center"><i class="fas ${icon} text-[12rem] text-squidPink drop-shadow-[0_0_30px_rgba(255,0,90,0.5)]"></i></div>`;
+            }
+            
+            modal.classList.remove('hidden');
+            gsap.fromTo("#preview-modal .glass", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.7)" });
+            document.body.style.overflow = 'hidden';
+        }
+
+        document.getElementById('live-search').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = allFiles.filter(f => 
+                (f.name + f.caption + f.category).toLowerCase().includes(term)
+            );
+            renderRecent(filtered.slice(0, 10));
+            renderSubjectGrids(filtered);
+        });
+
+        async function wakeUpBot() {
+            const btn = document.getElementById('wake-up-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> WAKING UP...';
+            try {
+                // Pinging the backend wakes up the Manus sandbox
+                await fetch(`${API_BASE}/ping`);
+                btn.innerHTML = '<i class="fas fa-check mr-2"></i> BOT IS ACTIVE';
+                btn.classList.replace('text-green-500', 'text-blue-400');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.replace('text-blue-400', 'text-green-500');
+                }, 3000);
+            } catch (error) {
+                btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> WAKE FAILED';
+                setTimeout(() => btn.innerHTML = originalText, 3000);
+            }
+        }
+
+        async function fetchFiles() {
+            try {
+                const response = await fetch(`${API_BASE}/files`);
+                allFiles = await response.json();
+                renderRecent(allFiles.slice(0, 10));
+                renderSubjectGrids(allFiles);
+                updateProgress();
+                initAnimations();
+                document.getElementById('wake-up-btn').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('wake-up-btn').classList.remove('hidden');
+            }
+        }
+
+        function closePreview() {
+            gsap.to("#preview-modal .glass", { scale: 0.8, opacity: 0, duration: 0.3, onComplete: () => {
+                document.getElementById('preview-modal').classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }});
+        }
+
+        function scrollRecent(amount) {
+            document.getElementById('recent-list').scrollBy({ left: amount, behavior: 'smooth' });
+        }
+
+        function initAnimations() {
+            gsap.registerPlugin(ScrollTrigger);
+
+            // Hero Parallax
+            gsap.to("#hero-bg", {
+                yPercent: 20,
+                ease: "none",
+                scrollTrigger: {
+                    trigger: "section",
+                    start: "top top",
+                    end: "bottom top",
+                    scrub: true
+                }
+            });
+
+            // Navbar Scroll Effect
+            window.addEventListener('scroll', () => {
+                const nav = document.getElementById('navbar');
+                if (window.scrollY > 50) {
+                    nav.classList.add('py-2', 'bg-black/80');
+                    nav.classList.remove('py-4', 'bg-black/40');
+                } else {
+                    nav.classList.add('py-4', 'bg-black/40');
+                    nav.classList.remove('py-2', 'bg-black/80');
+                }
+            });
+
+            // Reveal Sections
+            gsap.utils.toArray('.subject-section').forEach(section => {
+                gsap.from(section, {
+                    opacity: 0,
+                    y: 50,
+                    duration: 1,
+                    scrollTrigger: {
+                        trigger: section,
+                        start: "top 80%",
+                    }
+                });
+            });
+        }
+
+        fetchFiles();
+        setInterval(fetchFiles, 60000);
+    </script>
+</body>
+</html>
