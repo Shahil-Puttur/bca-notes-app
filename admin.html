@@ -15,7 +15,7 @@
         .log-container { height: 300px; overflow-y: scroll; border: 1px dashed #333; padding: 10px; background: #050505; }
         .log-entry { margin-bottom: 5px; border-bottom: 1px solid #111; padding-bottom: 2px; word-break: break-all; }
         .success { color: #0f0; } 
-        .error { color: #f00; background: rgba(255,0,0,0.1); } 
+        .error { color: #f00; background: rgba(255,0,0,0.2); } 
         .alert { color: #ff005a; }
         .info { color: #888; }
     </style>
@@ -25,7 +25,6 @@
     
     <div class="box">
         <h3>1. AUTHENTICATION</h3>
-        <!-- Inputs preserve values using localStorage -->
         <input type="text" id="tg-token" placeholder="Telegram Bot Token">
         <input type="text" id="admin-id" placeholder="Your Telegram User ID">
         <button onclick="handleAuthClick()">🚀 START SYSTEM</button>
@@ -58,7 +57,7 @@
         let lastUpdateId = 0;
         let isPolling = false;
 
-        // --- GLOBAL ERROR HANDLING (For Mobile Debugging) ---
+        // --- GLOBAL ERROR HANDLING ---
         window.onerror = function(msg, url, line) {
             log(`CRITICAL ERROR: ${msg} (Line ${line})`, 'error');
             return false;
@@ -70,10 +69,8 @@
             document.getElementById('admin-id').value = localStorage.getItem('admin_id') || '';
             
             gapi.load('client', async () => {
-                try {
-                    await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
-                    log("Google API Loaded.", "info");
-                } catch(e) { log("API Init Error: " + JSON.stringify(e), 'error'); }
+                await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
+                log("Google API Loaded.", "info");
             });
 
             tokenClient = google.accounts.oauth2.initTokenClient({
@@ -95,22 +92,17 @@
             const ad = document.getElementById('admin-id').value;
             
             if(!tg || !ad) return alert("Please fill in Telegram details.");
-            
-            // Save for next time
             localStorage.setItem('tg_token', tg);
             localStorage.setItem('admin_id', ad);
-
             tokenClient.requestAccessToken({prompt: ''});
         }
 
         function startBotEngine() {
-            // 1. Try to play audio (catch error if mobile blocks it)
             try {
                 const audio = document.getElementById('bg-audio');
-                audio.play().catch(e => log("⚠️ Audio background sleep-prevention blocked (Tap screen if bot stops)", "info"));
+                audio.play().catch(e => log("⚠️ Tap screen to enable background mode.", "info"));
             } catch (e) { console.log(e); }
 
-            // 2. Start Polling
             if (!isPolling) {
                 isPolling = true;
                 log("📡 Bot is ONLINE and Polling Telegram...", "success");
@@ -133,45 +125,40 @@
                         lastUpdateId = update.update_id;
                         await processMessage(update.message, tgToken, adminId);
                     }
-                } else if (!data.ok) {
-                    log("Telegram Error: " + data.description, "error");
                 }
             } catch (e) {
-                log("Network Error (Retrying...): " + e.message, "info");
+                // Ignore network timeouts, they are normal in polling
+                if(!e.message.includes("Failed to fetch")) log("Polling Info: " + e.message, "info");
             }
 
-            // Loop
             setTimeout(pollTelegram, 2000); 
         }
 
         async function processMessage(msg, token, adminId) {
             if (!msg || String(msg.from.id) !== String(adminId)) return;
 
-            // Handle Text Commands
             if (msg.text === '/start') {
-                return sendMessage(msg.chat.id, "🤖 <b>BCA Bot Online.</b>\nSend me a file with a caption (e.g. #DBMS) to upload.", token);
+                return sendMessage(msg.chat.id, "🤖 <b>BCA Bot Online.</b>\nSend file + Caption (#DBMS, #C, #Math)", token);
             }
 
-            // Handle Files
             if (msg.document || msg.photo || msg.video) {
                 const fileObj = msg.document || msg.video || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
-                
-                // Caption Handling
                 const caption = msg.caption || "";
+                
                 let category = "General";
                 if(caption.toLowerCase().includes("dbms")) category = "DBMS";
-                if(caption.toLowerCase().includes("c programming")) category = "Programming in C";
-                if(caption.toLowerCase().includes("data")) category = "Data Structures";
-                if(caption.toLowerCase().includes("math")) category = "Mathematics";
+                else if(caption.toLowerCase().includes("c pro")) category = "Programming in C";
+                else if(caption.toLowerCase().includes("data")) category = "Data Structures";
+                else if(caption.toLowerCase().includes("math")) category = "Mathematics";
 
-                log(`📥 Processing File: ${category}`, "alert");
-                sendMessage(msg.chat.id, `⏳ <b>Processing...</b>\nCategory: ${category}`, token);
+                log(`📥 Processing: ${fileObj.file_name || 'Image'}`, "alert");
+                sendMessage(msg.chat.id, `⏳ <b>Downloading...</b>\nCategory: ${category}`, token);
 
                 try {
                     await handleFileUpload(fileObj, caption, category, msg.chat.id, token);
                 } catch (e) {
-                    log("Upload Failed: " + e.message, "error");
-                    sendMessage(msg.chat.id, "❌ Failed: " + e.message, token);
+                    log("❌ ERROR: " + e.message, "error");
+                    sendMessage(msg.chat.id, "❌ Error: " + e.message, token);
                 }
             }
         }
@@ -181,11 +168,18 @@
             const pathRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileObj.file_id}`);
             const pathJson = await pathRes.json();
             
-            if (pathJson.result.file_size > 20 * 1024 * 1024) throw new Error("File too large (>20MB) for browser bot.");
+            if (pathJson.result.file_size > 20 * 1024 * 1024) throw new Error("File > 20MB. Too large for browser bot.");
 
-            // 2. Download
-            const fileUrl = `https://api.telegram.org/file/bot${token}/${pathJson.result.file_path}`;
-            const blob = await fetch(fileUrl).then(r => r.blob());
+            // 2. Download via CORS PROXY (THE FIX)
+            // We use corsproxy.io to bypass the Telegram restriction
+            const rawTelegramUrl = `https://api.telegram.org/file/bot${token}/${pathJson.result.file_path}`;
+            const proxyUrl = `https://corsproxy.io/?` + encodeURIComponent(rawTelegramUrl);
+            
+            log("Fetching file via Proxy...", "info");
+            const blob = await fetch(proxyUrl).then(r => {
+                if(!r.ok) throw new Error("Proxy Download Failed");
+                return r.blob();
+            });
 
             // 3. Upload to Drive
             const fileName = fileObj.file_name || `upload_${Date.now()}.jpg`;
@@ -203,11 +197,10 @@
             };
             await updateDatabase(newEntry);
 
-            log("✅ Upload Complete!", "success");
-            sendMessage(chatId, `✅ <b>Uploaded!</b>\nView on site.`, token);
+            log("✅ Success!", "success");
+            sendMessage(chatId, `✅ <b>Uploaded Successfully!</b>\nSaved to: ${category}`, token);
         }
 
-        // --- DRIVE FUNCTIONS ---
         async function uploadToDrive(blob, name) {
             const accessToken = gapi.client.getToken().access_token;
             const metadata = { name: name, parents: [DRIVE_FOLDER_ID] };
@@ -215,28 +208,36 @@
             form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
             form.append('file', blob);
 
+            log("Uploading to Google Drive...", "alert");
             const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + accessToken },
                 body: form
             });
-            const data = await res.json();
-            
-            // Permission
-            await gapi.client.drive.permissions.create({
-                fileId: data.id, resource: { role: 'reader', type: 'anyone' }
-            });
-            return data;
+            return await res.json();
         }
 
         async function updateDatabase(newEntry) {
-            const res = await gapi.client.drive.files.get({ fileId: DB_FILE_ID, alt: 'media' });
-            let db = res.result || [];
-            if (typeof db === 'string') db = JSON.parse(db); // Safety check
+            log("Updating Database...", "info");
+            const accessToken = gapi.client.getToken().access_token;
             
+            // Fetch raw text to handle empty files
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${DB_FILE_ID}?alt=media`, {
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            });
+            
+            let dbText = await res.text();
+            let db = [];
+            try {
+                db = dbText ? JSON.parse(dbText) : [];
+            } catch(e) {
+                console.log("DB Parse Error (resetting):", e);
+                db = [];
+            }
+            
+            if(!Array.isArray(db)) db = [];
             db.unshift(newEntry);
 
-            const accessToken = gapi.client.getToken().access_token;
             await fetch(`https://www.googleapis.com/upload/drive/v3/files/${DB_FILE_ID}?uploadType=media`, {
                 method: 'PATCH',
                 headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
@@ -256,8 +257,7 @@
             const div = document.createElement('div');
             div.innerText = `> ${msg}`;
             div.className = `log-entry ${type}`;
-            const consoleDiv = document.getElementById('console');
-            consoleDiv.prepend(div);
+            document.getElementById('console').prepend(div);
         }
     </script>
 </body>
